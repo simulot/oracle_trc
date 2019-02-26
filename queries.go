@@ -42,15 +42,16 @@ func detectQuery(pl []byte) int {
 		l = 0x100
 	}
 	b := toUpperAscii(pl[:l])
+	pos := -1
 
 	for k := 0; k < len(queryKeyWords); k++ {
 		p := bytes.Index(b, queryKeyWords[k])
-		if p > 0 {
-			return p - 1
+		if pos == -1 || p > 0 {
+			pos = p - 1
 		}
 	}
 
-	return -1
+	return pos
 }
 
 func toUpperAscii(b []byte) []byte {
