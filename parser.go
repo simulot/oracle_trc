@@ -4,7 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"io"
-	"log"
+
+	"github.com/pkg/errors"
 )
 
 type packetType int
@@ -16,22 +17,29 @@ const (
 
 type Packet struct {
 	pid     int
-	t       packetType
 	ts      string
-	len     int
+	line    int
 	payload []byte
 }
 
-type parser struct {
-	s      *bufio.Scanner
-	buff   bytes.Buffer
-	pkChan chan *Packet
+type packetAndError struct {
+	*Packet
+	err error
 }
 
-func New(r io.Reader) *parser {
+type parser struct {
+	name   string
+	line   int
+	s      *bufio.Scanner
+	buff   bytes.Buffer
+	pkChan chan packetAndError
+}
+
+func New(r io.Reader, name string) *parser {
 	p := &parser{
+		name:   name,
 		s:      bufio.NewScanner(r),
-		pkChan: make(chan *Packet),
+		pkChan: make(chan packetAndError),
 	}
 
 	go func() {
@@ -43,29 +51,45 @@ func New(r io.Reader) *parser {
 	return p
 }
 
-func (p *parser) NextPacket() *Packet {
-	return <-p.pkChan
+func (p *parser) NextPacket() (*Packet, error) {
+	pk := <-p.pkChan
+	return pk.Packet, pk.err
+}
+
+func (p *parser) Scan() bool {
+	b := p.s.Scan()
+	p.line++
+	return b
 }
 
 type stateFn func(p *parser) stateFn
 
 func waitNSBasicBSD(p *parser) stateFn {
-	for p.s.Scan() {
+	for p.Scan() {
 		if bytes.HasSuffix(p.s.Bytes(), []byte("nsbasic_bsd: packet dump")) {
 			p.buff.Reset()
 			return inNSBasic
 		}
 	}
-	if p.s.Err() != io.EOF {
-		log.Println(p.s.Err())
+	if p.s.Err() != nil && p.s.Err() != io.EOF {
+		p.pkChan <- packetAndError{
+			Packet: nil,
+			err:    errors.Wrapf(p.s.Err(), "%s(%d)", p.name, p.line),
+		}
 	}
 	return nil
 }
 
 func inNSBasic(p *parser) stateFn {
+	// if p.line == 5422 {
+	// 	runtime.Breakpoint()
+	// }
+	p.buff.Reset()
 	var b []byte
-	pk := &Packet{}
-	for p.s.Scan() {
+	pk := &Packet{
+		line: p.line,
+	}
+	for p.Scan() {
 		b = p.s.Bytes()
 		if bytes.HasSuffix(b, []byte("nsbasic_bsd: exit (0)")) {
 			break
@@ -73,11 +97,17 @@ func inNSBasic(p *parser) stateFn {
 		p.scanPacketLine(pk, p.s.Bytes())
 	}
 	if p.s.Err() != nil && p.s.Err() != io.EOF {
-		log.Println(p.s.Err())
+		p.pkChan <- packetAndError{
+			Packet: nil,
+			err:    errors.Wrapf(p.s.Err(), "%s(%d)", p.name, p.line),
+		}
 	}
 	pk.payload = make([]byte, p.buff.Len())
 	copy(pk.payload, p.buff.Bytes())
-	p.pkChan <- pk
+	p.pkChan <- packetAndError{
+		Packet: pk,
+		err:    nil,
+	}
 	return waitNSBasicBSD
 }
 

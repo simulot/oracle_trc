@@ -6,16 +6,23 @@ import (
 	"strings"
 )
 
-func (p *parser) dumpQueries() {
+func (p *parser) dumpQueries() (err error) {
 
-	for pk := range p.pkChan {
+	for {
+		pk, err := p.NextPacket()
+		if err != nil {
+			return err
+		}
+		if pk == nil {
+			return nil
+		}
 		pl := pk.payload
 		pos := detectQuery(pl)
 		if pos < 0 {
 			continue
 		}
 
-		fmt.Printf("(%d) %s ", pk.pid, pk.ts)
+		fmt.Printf("%s(%d) (%d) %s ", p.name, pk.line, pk.pid, pk.ts)
 		fmt.Println(query(pl[pos:]))
 	}
 }
