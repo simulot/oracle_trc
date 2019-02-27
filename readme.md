@@ -9,6 +9,10 @@ I wrote this program to extract sql queries from trc files generated on client s
 ## Usage
 ```
 oracle_trc trace [, trace...]
+  -after string
+        Filter queries executed after this date. In same format as tsFormat parameter.
+  -tsFormat string
+        Timestamp format, oracle's way. (default "DD-MON-YYYY HH:MI:SS:FF3")
 ```
 
 The output looks like:
@@ -34,8 +38,11 @@ TRACE_DIRECTORY_CLIENT = d:\logs\oracle
 
 ## Do do
 
+- [X] Display queries after a given date
+- [_] Display executable associated with pid
 - [_] Write tests independent from trace files (confidentiality) 
 - [_] Sort outputs from several trace file in time order
+- [_] Understand binary format of packets (help wanted)
 - [_] Determine bind parameters value (help wanted)
-- [_] Decode responses (help wanted) 
+- [_] Decode responses (help wanted)
 

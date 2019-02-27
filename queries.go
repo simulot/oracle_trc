@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"time"
 )
 
-func (p *parser) dumpQueries() (err error) {
+func (p *parser) dumpQueries(after time.Time) (err error) {
 
 	for {
 		pk, err := p.NextPacket()
@@ -22,8 +23,15 @@ func (p *parser) dumpQueries() (err error) {
 			continue
 		}
 
-		fmt.Printf("%s(%d) (%d) %s ", p.name, pk.line, pk.pid, pk.ts)
-		fmt.Println(query(pl[pos:]))
+		if !after.IsZero() {
+			t, err := p.tParser(pk.ts)
+			if err == nil {
+				if t.After(after) {
+					fmt.Printf("%s(%d) (%d) %s ", p.name, pk.line, pk.pid, pk.ts)
+					fmt.Println(query(pl[pos:]))
+				}
+			}
+		}
 	}
 }
 

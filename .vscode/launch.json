@@ -11,7 +11,7 @@
             "mode": "auto",
             "program": "${fileDirname}",
             "env": {},
-            "args": ["C:\\TEMP\\trc\\*.trc"]
+            "args": ["-after","26-FEB-2019 14:12:00","C:\\TEMP\\trc\\*.trc"]
         }
     ]
 }

@@ -4,6 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+	"time"
+
+	"github.com/simulot/oracle_trc/ts"
 
 	"github.com/pkg/errors"
 )
@@ -17,7 +20,8 @@ const (
 
 type Packet struct {
 	pid     int
-	ts      string
+	ts      []byte
+	t       time.Time
 	line    int
 	payload []byte
 }
@@ -28,18 +32,20 @@ type packetAndError struct {
 }
 
 type parser struct {
-	name   string
-	line   int
-	s      *bufio.Scanner
-	buff   bytes.Buffer
-	pkChan chan packetAndError
+	name    string
+	line    int
+	s       *bufio.Scanner
+	buff    bytes.Buffer
+	pkChan  chan packetAndError
+	tParser ts.TimeParserFn
 }
 
-func New(r io.Reader, name string) *parser {
+func New(r io.Reader, name string, tParser ts.TimeParserFn) *parser {
 	p := &parser{
-		name:   name,
-		s:      bufio.NewScanner(r),
-		pkChan: make(chan packetAndError),
+		name:    name,
+		s:       bufio.NewScanner(r),
+		pkChan:  make(chan packetAndError),
+		tParser: tParser,
 	}
 
 	go func() {
@@ -88,6 +94,7 @@ func inNSBasic(p *parser) stateFn {
 	var b []byte
 	pk := &Packet{
 		line: p.line,
+		ts:   nil,
 	}
 	for p.Scan() {
 		b = p.s.Bytes()
@@ -115,8 +122,16 @@ func (p *parser) scanPacketLine(pk *Packet, b []byte) {
 	if len(b) == 0 {
 		return
 	}
-	b = b[1:] // Skip '('
+
 	i := 0
+	for i = 0; i < len(b); i++ {
+		if b[i] == '(' {
+			i++
+			break
+		}
+	}
+	b = b[i:] // Skip '('
+
 	if pk.pid == 0 {
 		for i = 0; i < len(b) && b[i] != ')'; i++ {
 			pk.pid = pk.pid*10 + int(b[i]-'0')
@@ -132,7 +147,8 @@ func (p *parser) scanPacketLine(pk *Packet, b []byte) {
 	for i = 0; i < len(b) && b[i] != ']'; i++ {
 	}
 	if len(pk.ts) == 0 && b[i] == ']' {
-		pk.ts = string(b[0:i])
+		pk.ts = make([]byte, i)
+		copy(pk.ts, b[0:i])
 	}
 
 	if i >= len(b) {
