@@ -31,7 +31,7 @@ func (p *parser) dumpQueries(after time.Time) (err error) {
 			}
 		}
 		if disp {
-			fmt.Printf("%s(%d) (%d) %s ", p.name, pk.line, pk.pid, pk.ts)
+			fmt.Printf("%s(%d) %s(%d) %s ", p.name, pk.line, p.clients[pk.pid], pk.pid, pk.ts)
 			fmt.Println(query(pl[pos:]))
 		}
 	}
