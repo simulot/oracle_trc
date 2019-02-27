@@ -23,14 +23,16 @@ func (p *parser) dumpQueries(after time.Time) (err error) {
 			continue
 		}
 
-		if !after.IsZero() {
+		disp := after.IsZero()
+		if !disp {
 			t, err := p.tParser(pk.ts)
 			if err == nil {
-				if t.After(after) {
-					fmt.Printf("%s(%d) (%d) %s ", p.name, pk.line, pk.pid, pk.ts)
-					fmt.Println(query(pl[pos:]))
-				}
+				disp = t.After(after)
 			}
+		}
+		if disp {
+			fmt.Printf("%s(%d) (%d) %s ", p.name, pk.line, pk.pid, pk.ts)
+			fmt.Println(query(pl[pos:]))
 		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+	"path/filepath"
 	"time"
 
 	"github.com/simulot/oracle_trc/ts"
@@ -38,6 +39,7 @@ type parser struct {
 	buff    bytes.Buffer
 	pkChan  chan packetAndError
 	tParser ts.TimeParserFn
+	clients map[int]string
 }
 
 func New(r io.Reader, name string, tParser ts.TimeParserFn) *parser {
@@ -46,10 +48,11 @@ func New(r io.Reader, name string, tParser ts.TimeParserFn) *parser {
 		s:       bufio.NewScanner(r),
 		pkChan:  make(chan packetAndError),
 		tParser: tParser,
+		clients: make(map[int]string),
 	}
 
 	go func() {
-		for fn := waitNSBasicBSD; fn != nil; {
+		for fn := waitInterstingLines; fn != nil; {
 			fn = fn(p)
 		}
 		close(p.pkChan)
@@ -70,11 +73,13 @@ func (p *parser) Scan() bool {
 
 type stateFn func(p *parser) stateFn
 
-func waitNSBasicBSD(p *parser) stateFn {
+func waitInterstingLines(p *parser) stateFn {
 	for p.Scan() {
 		if bytes.HasSuffix(p.s.Bytes(), []byte("nsbasic_bsd: packet dump")) {
-			p.buff.Reset()
 			return inNSBasic
+		}
+		if bytes.Contains(p.s.Bytes(), []byte("nsc2addr:")) {
+			return inNSC2Addr
 		}
 	}
 	if p.s.Err() != nil && p.s.Err() != io.EOF {
@@ -87,9 +92,6 @@ func waitNSBasicBSD(p *parser) stateFn {
 }
 
 func inNSBasic(p *parser) stateFn {
-	// if p.line == 5422 {
-	// 	runtime.Breakpoint()
-	// }
 	p.buff.Reset()
 	var b []byte
 	pk := &Packet{
@@ -115,12 +117,13 @@ func inNSBasic(p *parser) stateFn {
 		Packet: pk,
 		err:    nil,
 	}
-	return waitNSBasicBSD
+	return waitInterstingLines
 }
 
-func (p *parser) scanPacketLine(pk *Packet, b []byte) {
+func (p *parser) scanPID(b []byte) (int, []byte) {
+	pid := 0
 	if len(b) == 0 {
-		return
+		return 0, b
 	}
 
 	i := 0
@@ -132,18 +135,26 @@ func (p *parser) scanPacketLine(pk *Packet, b []byte) {
 	}
 	b = b[i:] // Skip '('
 
+	for i = 0; i < len(b) && b[i] != ')'; i++ {
+		pid = pid*10 + int(b[i]-'0')
+	}
+	b = b[i:]
+	return pid, b
+}
+
+func (p *parser) scanPacketLine(pk *Packet, b []byte) {
 	if pk.pid == 0 {
-		for i = 0; i < len(b) && b[i] != ')'; i++ {
-			pk.pid = pk.pid*10 + int(b[i]-'0')
-		}
-	} else {
-		for i = 0; i < len(b) && b[i] != ')'; i++ {
+		pk.pid, b = p.scanPID(b)
+	}
+
+	i := 0
+	for i = 0; i < len(b); i++ {
+		if b[i] == '[' {
+			i++
+			break
 		}
 	}
-	if len(b) < i+3 {
-		return
-	}
-	b = b[i+3:]
+	b = b[i:]
 	for i = 0; i < len(b) && b[i] != ']'; i++ {
 	}
 	if len(pk.ts) == 0 && b[i] == ']' {
@@ -184,4 +195,32 @@ func hex(buf []byte) byte {
 		}
 	}
 	return b
+}
+
+func inNSC2Addr(p *parser) stateFn {
+	var b []byte
+
+	for p.Scan() {
+		b = p.s.Bytes()
+		if bytes.HasSuffix(b, []byte("nsc2addr: normal exit")) {
+			break
+		}
+		pos := bytes.Index(b, []byte("PROGRAM"))
+		if pos >= 0 {
+			pid, _ := p.scanPID(b)
+
+			b = b[pos+len("PROGRAM="):]
+			pos = bytes.Index(b, []byte(")"))
+			if pos >= 0 {
+				p.clients[pid] = filepath.Base(string(b[:pos]))
+			}
+		}
+	}
+	if p.s.Err() != nil && p.s.Err() != io.EOF {
+		p.pkChan <- packetAndError{
+			Packet: nil,
+			err:    errors.Wrapf(p.s.Err(), "%s(%d)", p.name, p.line),
+		}
+	}
+	return waitInterstingLines
 }
