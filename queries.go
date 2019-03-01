@@ -44,6 +44,7 @@ var queryKeyWords = [][]byte{
 	[]byte("MERGE"),
 	[]byte("DELETE"),
 	[]byte("ALTER"),
+	[]byte("WIDTH"),
 }
 
 func detectQuery(pl []byte) int {
@@ -56,7 +57,7 @@ func detectQuery(pl []byte) int {
 
 	for k := 0; k < len(queryKeyWords); k++ {
 		p := bytes.Index(b, queryKeyWords[k])
-		if pos == -1 || p > 0 {
+		if pos == -1 || (p > 0 && p < pos) {
 			pos = p
 		}
 	}
@@ -67,7 +68,7 @@ func detectQuery(pl []byte) int {
 	// Check white chars prepending the query
 	for pos > 1 {
 		switch b[pos-1] {
-		case ' ', '\t', '\r', '\n':
+		case ' ', '\t', '\r', '\n', '(':
 			pos--
 		default:
 			return pos - 1

@@ -38,7 +38,7 @@ TRACE_DIRECTORY_CLIENT = d:\logs\oracle
 ## Do do
 
 - [X] Display queries after a given date
-- [_] Display executable associated with pid
+- [X] Display executable associated with pid
 - [_] Write tests independent from trace files (confidentiality) 
 - [_] Sort outputs from several trace file in time order
 - [_] Understand binary format of packets (help wanted)
