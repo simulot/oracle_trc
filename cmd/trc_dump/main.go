@@ -72,8 +72,6 @@ func main() {
 					}
 				}
 				fmt.Println(pk.String())
-				var input string
-				fmt.Scanln(&input)
 			}
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)

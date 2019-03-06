@@ -14,22 +14,16 @@ import (
 
 // Packet hold packet content and context of packet
 type Packet struct {
-	Direction PacketDirection // Packet direction
-	Name      string          // Trace file name
-	Line      int             // Line number in trace file
-	Pid       int             // Client PID
-	Client    string          // Client name
-	TS        []byte          // Event time as written in trc file
-	Payload   []byte          // Packet content
+	Name    string // Trace file name
+	Typ     string // Packet type as read in trc
+	Line    int    // Line number in trace file
+	Pid     int    // Client PID
+	Client  string // Client name
+	TS      []byte // Event time as written in trc file
+	Payload []byte // Packet content
 }
 
 type PacketDirection int
-
-const (
-	DirUndetermined PacketDirection = iota
-	DirClientToServer
-	DirServeToClient
-)
 
 // Parser is used to parse trc files and extract data packets
 type Parser struct {
@@ -40,6 +34,7 @@ type Parser struct {
 	pkChan     chan packetAndError // gather extracted packets
 	clients    map[int]string      // Hold client names per PID
 	packetType string              // current packet type as seen in trc file
+	pk         *Packet             // current packet
 }
 
 // String implement the basic representation of packet: Packet's context and its content in hexadecimal
@@ -51,13 +46,6 @@ func (pk Packet) String() string {
 	writeEol(&sb)
 	return sb.String()
 }
-
-type packetType int
-
-const (
-	nsbasic_bsd packetType = iota
-	nsbasic_brc
-)
 
 type packetAndError struct {
 	pk  *Packet
@@ -72,7 +60,7 @@ func New(r io.Reader, name string) *Parser {
 		pkChan:     make(chan packetAndError),
 		clients:    make(map[int]string),
 		name:       name,
-		packetType: make([]byte, 20),
+		packetType: "",
 	}
 
 	go func() {
@@ -127,24 +115,28 @@ func (p *Parser) determinePacketType(b []byte) stateFn {
 	if i > 0 {
 		p.packetType = string(b[:i])
 	}
+	p.pk = &Packet{
+		Name: p.name,
+		Line: p.line,
+		TS:   nil,
+		Typ:  p.packetType,
+	}
+
 	return inDumpPacket
 }
 
 // inDumpPacket scan nsbasic lines then yield to waitInterstingLines
 func inDumpPacket(p *Parser) stateFn {
 	p.buff.Reset()
+	var packetType = []byte(p.pk.Typ)
 	var b []byte
-	pk := &Packet{
-		Name: p.name,
-		Line: p.line,
-		TS:   nil,
-	}
+
 	for p.scan() {
 		b = p.s.Bytes()
-		if !bytes.Contains(b, p.packetType) {
+		if !bytes.Contains(b, packetType) {
 			break
 		}
-		p.scanPacketLine(pk, p.s.Bytes())
+		p.scanPacketLine(p.s.Bytes())
 	}
 	if p.s.Err() != nil && p.s.Err() != io.EOF {
 		p.pkChan <- packetAndError{
@@ -152,10 +144,10 @@ func inDumpPacket(p *Parser) stateFn {
 			err: errors.Wrapf(p.s.Err(), "Error reading %s at line %d", p.name, p.line),
 		}
 	}
-	pk.Payload = make([]byte, p.buff.Len())
-	copy(pk.Payload, p.buff.Bytes())
+	p.pk.Payload = make([]byte, p.buff.Len())
+	copy(p.pk.Payload, p.buff.Bytes())
 	p.pkChan <- packetAndError{
-		pk:  pk,
+		pk:  p.pk,
 		err: nil,
 	}
 	return waitInterstingLines
@@ -185,11 +177,11 @@ func (p *Parser) scanPID(b []byte) (int, []byte) {
 }
 
 // scanPacketLine scan one of packets lines
-func (p *Parser) scanPacketLine(pk *Packet, b []byte) {
-	if pk.Pid == 0 {
+func (p *Parser) scanPacketLine(b []byte) {
+	if p.pk.Pid == 0 {
 		// Get PID and client
-		pk.Pid, b = p.scanPID(b)
-		pk.Client = p.clients[pk.Pid]
+		p.pk.Pid, b = p.scanPID(b)
+		p.pk.Client = p.clients[p.pk.Pid]
 	}
 
 	// Go to time stamp begin
@@ -200,26 +192,23 @@ func (p *Parser) scanPacketLine(pk *Packet, b []byte) {
 			break
 		}
 	}
+
+	// Determine time stop
 	b = b[i:]
 	for i = 0; i < len(b) && b[i] != ']'; i++ {
 	}
-	if len(pk.TS) == 0 && b[i] == ']' {
-		pk.TS = make([]byte, i)
-		copy(pk.TS, b[0:i])
+	if len(p.pk.TS) == 0 && b[i] == ']' {
+		p.pk.TS = make([]byte, i)
+		copy(p.pk.TS, b[0:i])
 	}
 
 	if i >= len(b) {
 		return
 	}
 
-	// skip "nsbasic_bsd:"
-	b = b[i+1:]
+	// skip packet type
+	b = b[i+2:]
 	for i = 0; i < len(b) && b[i] != ':'; i++ {
-	}
-	if bytes.Equal(b[i-3:i], []byte("bsd")) {
-		pk.Direction = DirClientToServer
-	} else {
-		pk.Direction = DirServeToClient
 	}
 
 	if i >= len(b) {
@@ -282,16 +271,13 @@ func inNSC2Addr(p *Parser) stateFn {
 // context write packet context to the string builder
 func (pk Packet) context(sb *strings.Builder) {
 	sb.WriteString(pk.Name)
-	sb.WriteString(fmt.Sprintf("(%d) ", pk.Line))
+	sb.WriteString(fmt.Sprintf("(%d),", pk.Line))
 	sb.Write(pk.TS)
-	sb.WriteByte(' ')
+	sb.WriteByte(',')
 	sb.WriteString(pk.Client)
-	switch pk.Direction {
-	case DirClientToServer:
-		sb.WriteString(" send:")
-	case DirServeToClient:
-		sb.WriteString(" receive:")
-	}
+	sb.WriteString(fmt.Sprintf("(%d),", pk.Pid))
+	sb.WriteString(pk.Typ)
+	sb.WriteByte(':')
 }
 
 // hexDump
