@@ -23,8 +23,6 @@ type Packet struct {
 	Payload []byte // Packet content
 }
 
-type PacketDirection int
-
 // Parser is used to parse trc files and extract data packets
 type Parser struct {
 	name       string              // Source name, used for reporting errors
@@ -40,7 +38,7 @@ type Parser struct {
 // String implement the basic representation of packet: Packet's context and its content in hexadecimal
 func (pk Packet) String() string {
 	sb := strings.Builder{}
-	pk.context(&sb)
+	pk.WriteContext(&sb)
 	writeEol(&sb)
 	pk.hexdump(&sb)
 	writeEol(&sb)
@@ -85,6 +83,7 @@ func (p *Parser) scan() bool {
 	return b
 }
 
+// stateFn is the function that handle a state
 type stateFn func(p *Parser) stateFn
 
 func waitInterstingLines(p *Parser) stateFn {
@@ -268,8 +267,8 @@ func inNSC2Addr(p *Parser) stateFn {
 	return waitInterstingLines
 }
 
-// context write packet context to the string builder
-func (pk Packet) context(sb *strings.Builder) {
+// WriteContext write packet context to the string builder
+func (pk Packet) WriteContext(sb *strings.Builder) {
 	sb.WriteString(pk.Name)
 	sb.WriteString(fmt.Sprintf("(%d),", pk.Line))
 	sb.Write(pk.TS)

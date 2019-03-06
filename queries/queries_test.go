@@ -6,8 +6,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-
-	"github.com/simulot/oracle_trc/ts"
 )
 
 func Test_toUpperAscii(t *testing.T) {
@@ -54,22 +52,18 @@ func significantCharsEqual(s1, s2 string) bool {
 
 // getQueryFromTraceSnippet is an helper to get sql query from trace by using the parser type
 func getQueryFromTraceSnippet(trc string) (string, error) {
-	p := New(strings.NewReader(trc), "test", ts.OracleTS_DD_MON_YYYY_HH_MI_SS_FF9)
+	p := New(strings.NewReader(trc), "test")
 
 	for {
-		pk, err := p.NextPacket()
+		q, err := p.Next()
 		if err != nil {
 			return "", err
 		}
-		if pk == nil {
+		if q == nil {
 			return "", nil
 		}
-		pl := pk.payload
-		pos := detectQuery(pl)
-		if pos < 0 {
-			continue
-		}
-		return query(pl[pos:]), nil
+
+		return q.Query, nil
 	}
 	return "", errors.New("Should not happen")
 }

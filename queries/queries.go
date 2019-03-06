@@ -1,47 +1,98 @@
 package queries
 
 import (
-	"github.com/simulot/oracle_trc/trc"
 	"bytes"
-	"fmt"
+	"io"
+	"runtime"
 	"strings"
-	"time"
+
+	"github.com/simulot/oracle_trc/trc"
 )
 
-func PacketToQueries(pkChan chan trc.Packet) chan Queries {
-	
+// Packet hold packet content and context of packet
+type Query struct {
+	Query  string      // Query text
+	Packet *trc.Packet // Query's packet
 }
-]  
 
+// String implement the basic representation of packet: Packet's context and its content in hexadecimal
+func (q Query) String() string {
+	sb := strings.Builder{}
+	q.Packet.WriteContext(&sb)
+	writeEol(&sb)
+	sb.WriteString(q.Query)
+	writeEol(&sb)
+	return sb.String()
+}
 
-func (p *parser) DumpQueries(after time.Time) (err error) {
+// Parser is used to parse trc files and extract queries
+type Parser struct {
+	p     *trc.Parser // Trace file parser
+	q     *Query      // current query
+	qChan chan queryAndError
+}
 
+type queryAndError struct {
+	q   *Query
+	err error
+}
+
+// New create a trc parser
+func New(r io.Reader, name string) *Parser {
+	p := &Parser{
+		p:     trc.New(r, name),
+		qChan: make(chan queryAndError),
+	}
+
+	go func() {
+		for fn := waitQuery; fn != nil; {
+			fn = fn(p)
+		}
+		close(p.qChan)
+	}()
+	return p
+}
+
+// NextPacket deliver each packet until EOF or error
+func (p *Parser) Next() (*Query, error) {
+	r := <-p.qChan
+	return r.q, r.err
+}
+
+// stateFn is the function that handle a state
+type stateFn func(p *Parser) stateFn
+
+// waitQuery wait a packet sent by the client with a query
+func waitQuery(p *Parser) stateFn {
 	for {
-		pk, err := p.NextPacket()
-		if err != nil {
-			return err
+		pk, err := p.p.NextPacket()
+		if pk == nil || err != nil {
+			break
 		}
-		if pk == nil {
-			return nil
-		}
-		pl := pk.payload
-		pos := detectQuery(pl)
-		if pos < 0 {
-			continue
-		}
-
-		disp := after.IsZero()
-		if !disp {
-			t, err := p.tParser(pk.ts)
-			if err == nil {
-				disp = t.After(after)
-			}
-		}
-		if disp {
-			fmt.Printf("%s(%d) %s(%d) %s ", p.name, pk.line, p.clients[pk.pid], pk.pid, pk.ts)
-			fmt.Println(query(pl[pos:]))
+		if pk.Typ == "nsbasic_bsd" {
+			return p.parseQuery(pk)
 		}
 	}
+	return nil
+}
+
+// parseQuery and returns the next stateFn
+func (p *Parser) parseQuery(pk *trc.Packet) stateFn {
+	payload := pk.Payload
+	pos := detectQuery(payload)
+	if pos < 0 {
+		return waitQuery
+	}
+
+	q := &Query{
+		Packet: pk,
+		Query:  query(payload[pos:]),
+	}
+	p.qChan <- queryAndError{
+		q:   q,
+		err: nil,
+	}
+	return waitQuery
 }
 
 var queryKeyWords = [][]byte{
@@ -108,4 +159,13 @@ func query(b []byte) string {
 		}
 	}
 	return sb.String()
+}
+
+// writeEol add EOF marker to the string builder according running OS
+func writeEol(sb *strings.Builder) {
+	if runtime.GOOS == "WINDOWS" {
+		sb.Write([]byte{0x0a, 0x0b})
+		return
+	}
+	sb.WriteByte('\n')
 }
