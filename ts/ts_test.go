@@ -46,6 +46,12 @@ func TestOracleTS_DD_MON_YYYY_HH_MI_SS_FF3(t *testing.T) {
 			want:    time.Date(2019, 02, 26, 0, 0, 0, 0, time.Local),
 			wantErr: false,
 		},
+		{
+			name:    "04-MAR-2019 15:30:23:851",
+			args:    args{[]byte("04-MAR-2019 15:30:23:851")},
+			want:    time.Date(2019, 03, 04, 15, 30, 23, 851, time.Local),
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

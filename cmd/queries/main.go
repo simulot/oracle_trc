@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-
+	"github.com/simulot/oracle_trc/trc"
 	"github.com/simulot/oracle_trc/ts"
 )
 
@@ -54,8 +54,8 @@ func main() {
 				os.Exit(1)
 			}
 			defer f.Close()
-			p := New(f, fn, timeParser)
-			err = p.dumpQueries(tAfter)
+			p := trc.New(f, fn, timeParser)
+			err = p.DumpQueries(tAfter)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 			}
