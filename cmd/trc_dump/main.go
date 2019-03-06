@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/simulot/oracle_trc/trc"
 
+	"github.com/pkg/errors"
 	"github.com/simulot/oracle_trc/ts"
 )
 
@@ -19,7 +20,7 @@ func main() {
 	flag.Parse()
 
 	if len(flag.Args()) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: oracle_trc trace [, trace...]")
+		fmt.Fprintln(os.Stderr, "Usage: trc_dump trace [, trace...]")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -54,12 +55,29 @@ func main() {
 				os.Exit(1)
 			}
 			defer f.Close()
-			p := New(f, fn, timeParser)
-			err = p.dumpQueries(tAfter)
+			p := trc.New(f, fn)
+			var pk *trc.Packet
+			for {
+				pk, err = p.NextPacket()
+				if err != nil || pk == nil {
+					break
+				}
+				if !tAfter.IsZero() && len(pk.TS) > 0 {
+					ts, err := timeParser(pk.TS)
+					if err != nil {
+						break
+					}
+					if tAfter.After(ts) {
+						break
+					}
+				}
+				fmt.Println(pk.String())
+				var input string
+				fmt.Scanln(&input)
+			}
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 			}
 		}
 	}
-
 }

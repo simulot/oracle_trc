@@ -16,7 +16,7 @@ type TimeParserFn func([]byte) (time.Time, error)
 func GetParser(layout string) (TimeParserFn, error) {
 	f, ok := parser[layout]
 	if !ok {
-		return nil, errors.Errorf("Unsupported time format :'%'", layout)
+		return nil, errors.Errorf("Unsupported time format :'%s'", layout)
 	}
 	return f, nil
 }

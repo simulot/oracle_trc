@@ -1,13 +1,20 @@
-package main
+package queries
 
 import (
+	"github.com/simulot/oracle_trc/trc"
 	"bytes"
 	"fmt"
 	"strings"
 	"time"
 )
 
-func (p *parser) dumpQueries(after time.Time) (err error) {
+func PacketToQueries(pkChan chan trc.Packet) chan Queries {
+	
+}
+]  
+
+
+func (p *parser) DumpQueries(after time.Time) (err error) {
 
 	for {
 		pk, err := p.NextPacket()

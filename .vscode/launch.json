@@ -12,7 +12,7 @@
             "mode": "auto",
             "program": "${fileDirname}",
             "env": {},
-            "args": ["-after","26-FEB-2019 14:12:00","C:\\TEMP\\trc\\*.trc"]
+            "args": ["-after=01-JAN-2019 00:00:00:000", "/home/jfcassan/Downloads/trc/*.trc"]
         }
     ]
 }
