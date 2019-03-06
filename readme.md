@@ -9,7 +9,8 @@ Dump packets from trc files.
 
 See cmd/trc_dump/readme.md for details
 
-
+## queries
+Dump SQL queries found in trc file
 
 ## Enabling trace files
 Add following lines to SQLNET.ORA file
@@ -25,7 +26,7 @@ TRACE_DIRECTORY_CLIENT = d:\logs\oracle
 
 - [X] Display queries after a given date
 - [X] Display executable associated with pid
-- [ ] Write tests independent from trace files (confidentiality) 
+- [X] Write tests independent from trace files (confidentiality) 
 - [ ] Sort outputs from several trace file in time order
 - [ ] Understand binary format of packets (help wanted)
 - [ ] Determine bind parameters value (help wanted)
