@@ -12,7 +12,7 @@
             "mode": "auto",
             "program": "${fileDirname}",
             "env": {},
-            "args": ["-after=01-JAN-2019 00:00:00:000", "..\\..\\DATA\\*.trc", "/home/jfcassan/Downloads/trc/*.trc"]
+           // "args": ["-after=01-MAR-2019 00:00:00:000", "C:\\Users\\jf.cassan\\Documents\\Go\\src\\github.com\\simulot\\oracle_trc\\DATA\\cli_7980.trc" ]//"..\\..\\DATA\\*.trc", "/home/jfcassan/Downloads/trc/*.trc"]
         }
     ]
 }

@@ -5,7 +5,6 @@
 I wrote this program to extract sql queries from trc files generated on client side.
 
 
-
 ## Usage
 ```
 oracle_trc trace [, trace...]
