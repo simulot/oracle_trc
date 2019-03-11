@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -14,7 +15,7 @@ import (
 
 func main() {
 	flag.Usage = func() {
-		fmt.Println("Display all packets contained into given files in hexadecimal format like hex -C would do.")
+		fmt.Println("Display all queries contained in trc files.")
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", filepath.Base(os.Args[0]))
 		flag.PrintDefaults()
 	}
@@ -52,6 +53,7 @@ func main() {
 			os.Exit(1)
 		}
 		for _, fn := range fns {
+			fmt.Println(fn)
 			err = parseFile(fn, timeParser, tAfter)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -69,7 +71,7 @@ func parseFile(fn string, timeParser ts.TimeParserFn, tAfter time.Time) error {
 	defer f.Close()
 	p := queries.New(f, fn)
 	var q *queries.Query
-	for {
+	for err != io.EOF {
 		q, err = p.Next()
 		if err != nil || q == nil {
 			break

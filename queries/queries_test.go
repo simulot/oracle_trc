@@ -56,14 +56,10 @@ func getQueryFromTraceSnippet(trc string) (string, error) {
 
 	for {
 		q, err := p.Next()
-		if err != nil {
-			return "", err
-		}
-		if q == nil {
+		if q == nil && err == nil {
 			return "", nil
 		}
-
-		return q.Query, nil
+		return q.Query, err
 	}
 	return "", errors.New("Should not happen")
 }
@@ -77,6 +73,7 @@ func Test_getQueryFromTraceSnippet(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
+
 		{
 			name: "simple short select",
 			args: args{
@@ -98,6 +95,7 @@ func Test_getQueryFromTraceSnippet(t *testing.T) {
 			want:    "select doc_id from DOCS",
 			wantErr: false,
 		},
+
 		{
 			name: "simple insert",
 			args: args{
@@ -149,6 +147,7 @@ func Test_getQueryFromTraceSnippet(t *testing.T) {
 			want:    "INSERT INTO flow_log (doc_id,sender_name,action_name,sended_to_timestamp,action_index) VALUES (:1,:2,:3,SYSDATE,:4)",
 			wantErr: false,
 		},
+
 		{
 			name: "simple select lowcase",
 			args: args{
@@ -351,26 +350,26 @@ func Test_getQueryFromTraceSnippet(t *testing.T) {
 					"(6632) [26-FEB-2019 11:49:09:542] nsbasic_bsd: exit (0)",
 			},
 			want: `
-						select count(*) from (
-						with D as (
-							select DOC_ID,STATUS_INDEX
-							from DOCS where STATUS_INDEX in (2,99)
-						),last_AL as (
-							select al.doc_id, max(al.stamp_date) stamp_date
-							from action_log al join D on D.DOC_ID = al.DOC_ID
-							group by al.doc_id
-						), 
-						lastAL_UID as (
-							select distinct AL.doc_id,AL.stamp_uid 
-							from D join last_AL LAL on D.DOC_ID = LAL.DOC_ID
-							join action_log AL on LAL.DOC_ID = AL.DOC_ID and LAL.stamp_date = AL.stamp_date
-						)
-						select D.DOC_ID, LAL.STAMP_UID from lastAL_UID LAL join D on D.DOC_ID = LAL.DOC_ID
-						where 
-							LAL.stamp_uid not in ('INVOICE FEEDBACK', 'AUTOTRANSFER')
-							and D.DOC_ID = :0
-						) R
-		`,
+										select count(*) from (
+										with D as (
+											select DOC_ID,STATUS_INDEX
+											from DOCS where STATUS_INDEX in (2,99)
+										),last_AL as (
+											select al.doc_id, max(al.stamp_date) stamp_date
+											from action_log al join D on D.DOC_ID = al.DOC_ID
+											group by al.doc_id
+										),
+										lastAL_UID as (
+											select distinct AL.doc_id,AL.stamp_uid
+											from D join last_AL LAL on D.DOC_ID = LAL.DOC_ID
+											join action_log AL on LAL.DOC_ID = AL.DOC_ID and LAL.stamp_date = AL.stamp_date
+										)
+										select D.DOC_ID, LAL.STAMP_UID from lastAL_UID LAL join D on D.DOC_ID = LAL.DOC_ID
+										where
+											LAL.stamp_uid not in ('INVOICE FEEDBACK', 'AUTOTRANSFER')
+											and D.DOC_ID = :0
+										) R
+						`,
 			wantErr: false,
 		},
 		{
@@ -516,6 +515,35 @@ func Test_getQueryFromTraceSnippet(t *testing.T) {
 			},
 			want:    "select field_name, table_name, field_width, field_sort, special_field from report_headers2 r1 where UPPER(r1.search_id) =  :1 and r1.user_id='DEFAULT' and trim(field_name)  not in (select trim(field_name) from report_headers2 r2 where UPPER(r2.search_id)=:2  and r2.user_id=:3)",
 			wantErr: false,
+		},
+		{
+			name: "Unfinished packet",
+			args: args{
+				trc: "(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: packet dump\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 01 09 00 00 06 00 00 00  |........|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 00 00 11 69 34 01 01 01  |...i4...|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 01 02 03 5E 35 02 80 69  |...^5..i|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 00 01 02 01 32 01 01 0D  |....2...|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 01 01 00 01 64 00 01 01  |....d...|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 03 00 01 00 01 01 01 00  |........|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 00 01 01 00 00 00 00 00  |........|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: FE 40 53 45 4C 45 43 54  |.@SELECT|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 20 73 74 61 6D 70 5F 64  |.stamp_d|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 61 74 65 20 46 52 4F 4D  |ate.FROM|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 20 61 63 74 69 6F 6E 5F  |.action_|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 6C 6F 67 20 20 57 48 45  |log..WHE|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 52 45 20 64 6F 63 5F 69  |RE.doc_i|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 64 20 3D 20 3A 31 20 41  |d.=.:1.A|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 4E 44 20 6C 6F 67 5F 69  |ND.log_i|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 6E 64 26 65 78 20 49 4E  |nd&ex.IN|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 28 3A 32 2C 20 3A 33 29  |(:2,.:3)|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 20 4F 52 44 45 52 20 42  |.ORDER.B|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 59 20 73 74 61 6D 70 5F  |Y.stamp_|\r\n" +
+					"(1592) [08-MAR-2019 03:43:49:302] nsbasic_bsd: 64 61 74 65 20 44 45 53  |date.DES|\r\n" +
+					"",
+			},
+			want:    "SELECT stamp_date FROM action_log  WHERE doc_id = :1 AND log_index IN(:2, :3) ORDER BY stamp_date DES",
+			wantErr: false, // TODO: Should be error
 		},
 	}
 	for _, tt := range tests {

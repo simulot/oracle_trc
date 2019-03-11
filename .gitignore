@@ -1,4 +1,5 @@
 DATA
 debug
+debug.test
 *.txt
 *.exe

@@ -84,7 +84,7 @@ func parseFile(fn string, timeParser ts.TimeParserFn, tAfter time.Time) error {
 				continue
 			}
 		}
-		fmt.Println(pk.String())
+		fmt.Println(pk)
 	}
 	return nil
 }

@@ -3,13 +3,13 @@ package trc
 import (
 	"bufio"
 	"bytes"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"runtime"
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/simulot/oracle_trc/packet"
 )
 
 // Packet hold packet content and context of packet
@@ -33,16 +33,6 @@ type Parser struct {
 	clients    map[int]string      // Hold client names per PID
 	packetType string              // current packet type as seen in trc file
 	pk         *Packet             // current packet
-}
-
-// String implement the basic representation of packet: Packet's context and its content in hexadecimal
-func (pk Packet) String() string {
-	sb := strings.Builder{}
-	pk.WriteContext(&sb)
-	writeEol(&sb)
-	pk.hexdump(&sb)
-	writeEol(&sb)
-	return sb.String()
 }
 
 type packetAndError struct {
@@ -76,10 +66,23 @@ func (p *Parser) NextPacket() (*Packet, error) {
 	return pk.pk, pk.err
 }
 
+func (p *Parser) EmitPacket(pk *Packet, err error) {
+	if err == nil && pk == nil {
+		return
+	}
+	p.pkChan <- packetAndError{
+		pk:  pk,
+		err: errors.Wrapf(err, "Error reading %s at line %d", p.name, p.line),
+	}
+}
+
 // scan wrap the standard scan for counting lines
 func (p *Parser) scan() bool {
 	b := p.s.Scan()
 	p.line++
+	// if p.line%1000 == 0 || !b {
+	// 	fmt.Println(p.name, " ", p.line)
+	// }
 	return b
 }
 
@@ -95,12 +98,7 @@ func waitInterstingLines(p *Parser) stateFn {
 			return inNSC2Addr
 		}
 	}
-	if p.s.Err() != nil && p.s.Err() != io.EOF {
-		p.pkChan <- packetAndError{
-			pk:  nil,
-			err: errors.Wrapf(p.s.Err(), "Error reading %s at line %d", p.name, p.line),
-		}
-	}
+	p.EmitPacket(nil, p.s.Err())
 	return nil
 }
 
@@ -137,18 +135,10 @@ func inDumpPacket(p *Parser) stateFn {
 		}
 		p.scanPacketLine(p.s.Bytes())
 	}
-	if p.s.Err() != nil && p.s.Err() != io.EOF {
-		p.pkChan <- packetAndError{
-			pk:  nil,
-			err: errors.Wrapf(p.s.Err(), "Error reading %s at line %d", p.name, p.line),
-		}
-	}
+
 	p.pk.Payload = make([]byte, p.buff.Len())
 	copy(p.pk.Payload, p.buff.Bytes())
-	p.pkChan <- packetAndError{
-		pk:  p.pk,
-		err: nil,
-	}
+	p.EmitPacket(p.pk, errors.Wrap(p.s.Err(), "End of file while in packet dump") /*, nil*/)
 	return waitInterstingLines
 }
 
@@ -245,7 +235,7 @@ func inNSC2Addr(p *Parser) stateFn {
 	for p.scan() {
 		b = p.s.Bytes()
 		if bytes.HasSuffix(b, []byte("nsc2addr: normal exit")) {
-			break
+			return waitInterstingLines
 		}
 		pos := bytes.Index(b, []byte("PROGRAM"))
 		if pos >= 0 {
@@ -258,13 +248,19 @@ func inNSC2Addr(p *Parser) stateFn {
 			}
 		}
 	}
-	if p.s.Err() != nil && p.s.Err() != io.EOF {
-		p.pkChan <- packetAndError{
-			pk:  nil,
-			err: errors.Wrapf(p.s.Err(), "Error reading %s at line %d", p.name, p.line),
-		}
-	}
-	return waitInterstingLines
+	p.EmitPacket(nil, p.s.Err())
+	return nil
+}
+
+// String implement the basic representation of packet: Packet's context and its content in hexadecimal
+func (pk Packet) String() string {
+	sb := strings.Builder{}
+	pk.WriteContext(&sb)
+	writeEol(&sb)
+	pks := packet.ReadTNSData(pk.Payload)
+	pks.StringBuilder(&sb)
+	writeEol(&sb)
+	return sb.String()
 }
 
 // WriteContext write packet context to the string builder
@@ -277,11 +273,6 @@ func (pk Packet) WriteContext(sb *strings.Builder) {
 	sb.WriteString(fmt.Sprintf("(%d),", pk.Pid))
 	sb.WriteString(pk.Typ)
 	sb.WriteByte(':')
-}
-
-// hexDump
-func (pk Packet) hexdump(sb *strings.Builder) {
-	sb.WriteString(hex.Dump(pk.Payload))
 }
 
 // writeEol add EOF marker to the string builder according running OS

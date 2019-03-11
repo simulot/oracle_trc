@@ -2,6 +2,7 @@ package queries
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"runtime"
 	"strings"
@@ -66,11 +67,14 @@ type stateFn func(p *Parser) stateFn
 func waitQuery(p *Parser) stateFn {
 	for {
 		pk, err := p.p.NextPacket()
-		if pk == nil || err != nil {
+		if pk == nil && err == nil {
 			break
 		}
 		if pk.Typ == "nsbasic_bsd" {
 			return p.parseQuery(pk)
+		}
+		if err != nil {
+			fmt.Println(err)
 		}
 	}
 	return nil
@@ -148,14 +152,18 @@ func toUpperAscii(b []byte) []byte {
 
 func query(b []byte) string {
 	sb := strings.Builder{}
-	for {
+	for len(b) > 0 {
 		l := int(b[0])
 		if l == 0 || l == 1 || l > len(b) {
 			break
 		}
-		if l > 0 && l <= len(b) {
-			sb.Write(b[1 : l+1])
-			b = b[l+1:]
+		b = b[1:]
+		if l > 0 {
+			if l > len(b) {
+				l = len(b)
+			}
+			sb.Write(b[:l])
+			b = b[l:]
 		}
 	}
 	return sb.String()
