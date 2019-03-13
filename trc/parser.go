@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -20,6 +21,7 @@ type Packet struct {
 	Pid     int    // Client PID
 	Client  string // Client name
 	TS      []byte // Event time as written in trc file
+	Socket  int    // Socket
 	Payload []byte // Packet content
 }
 
@@ -32,7 +34,9 @@ type Parser struct {
 	pkChan     chan packetAndError // gather extracted packets
 	clients    map[int]string      // Hold client names per PID
 	packetType string              // current packet type as seen in trc file
+	packetEndMarker []byte // d
 	pk         *Packet             // current packet
+	socket     int                 // current socket
 }
 
 type packetAndError struct {
@@ -91,27 +95,42 @@ type stateFn func(p *Parser) stateFn
 
 func waitInterstingLines(p *Parser) stateFn {
 	for p.scan() {
-		if bytes.HasSuffix(p.s.Bytes(), []byte("packet dump")) {
-			return p.determinePacketType(p.s.Bytes())
+		if bytes.Contains(p.s.Bytes(), []byte("nspsend: entry")) {
+			return p.scanPacket("nspsend")
+		}
+		if bytes.HasSuffix(p.s.Bytes(), []byte("nsprecv: entry")) {
+			return p.scanPacket("nsprecv")
+		}
+		if bytes.HasSuffix(p.s.Bytes(), []byte("nsbasic_brc: entry")) {
+			return p.scanPacket("nsbasic_brc")
+		}
+		if bytes.HasSuffix(p.s.Bytes(), []byte("nsbasic_bsd: entry")) {
+			return p.scanPacket("nsbasic_bsd")
 		}
 		if bytes.Contains(p.s.Bytes(), []byte("nsc2addr:")) {
 			return inNSC2Addr
+		}
+
+	}
+	p.EmitPacket(nil, p.s.Err())
+	return nil
+}
+
+func inNetwork(p *Parser) stateFn {
+	for p.scan() {
+		if bytes.HasSuffix(p.s.Bytes(), []byte("exit")) {
+			return waitInterstingLines
+		}
+		if pos := bytes.Index(p.s.Bytes(), []byte("socket")); pos >= 0 && pos < len(p.s.Bytes())-2 {
+			p.socket, _ = strconv.Atoi(string(p.s.Bytes()[pos+1:]))
 		}
 	}
 	p.EmitPacket(nil, p.s.Err())
 	return nil
 }
 
-func (p *Parser) determinePacketType(b []byte) stateFn {
-	var i = 0
-	for i = 0; i < len(b) && b[i] != ']'; i++ {
-	}
-	i += 2
-	b = b[i:]
-	i = bytes.Index(b, []byte{':'})
-	if i > 0 {
-		p.packetType = string(b[:i])
-	}
+func (p *Parser) scanPacket(t string) stateFn {
+	p.packetType = t
 	p.pk = &Packet{
 		Name: p.name,
 		Line: p.line,
@@ -119,7 +138,22 @@ func (p *Parser) determinePacketType(b []byte) stateFn {
 		Typ:  p.packetType,
 	}
 
-	return inDumpPacket
+	return inPacket
+}
+
+func inPacket(p *Parser) stateFn {
+	exitString := []byte(p.packetType + ": exit")
+
+	for p.scan() {
+		b := p.s.Bytes()
+		if bytes.Contains(b, exitString) {
+			break
+		}
+		if 
+
+		p.scanPacketLine(p.s.Bytes())
+	}
+
 }
 
 // inDumpPacket scan nsbasic lines then yield to waitInterstingLines

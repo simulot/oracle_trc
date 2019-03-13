@@ -51,12 +51,17 @@ func Test_getPacketFromTraceSnippet(t *testing.T) {
 		},
 
 		{
-			name: "simple with connection info",
+			name: "simple with connection info and socket",
 			args: args{
 				trc: "(5304) [12-FEB-2019 17:25:10:647] nsc2addr: entry\r\n" +
-					"(5304) [12-FEB-2019 17:25:10:647] nsc2addr: (DESCRIPTION=(CONNECT_DATA=(SID=BSWD01)(CID=(PROGRAM=C:\\App\\Service.exe)(HOST=HOST)(USER=SYSTEM)))(ADDRESS=(PROTOCOL=TCP)(HOST=10.30.194.77)(PORT=1525)))\r\n" +
+					"(5304) [12-FEB-2019 17:25:10:647] nsc2addr: (DESCRIPTION=(CONNECT_DATA=(SID=BSWD01)(CID=(PROGRAM=C:\\App\\Service.exe)(HOST=APPSERVR)(USER=SYSTEM)))(ADDRESS=(PROTOCOL=TCP)(HOST=10.30.194.77)(PORT=1525)))\r\n" +
 					"(5304) [12-FEB-2019 17:25:10:647] nttbnd2addr: entry\r\n" +
 					"(5304) [12-FEB-2019 17:25:10:647] nsc2addr: normal exit\r\n" +
+					"(5304) [12-FEB-2019 17:25:10:647] nsprecv: entry\r\n" +
+					"(5304) [12-FEB-2019 17:25:10:647] nsprecv: reading frm transport...\r\n" +
+					"(5304) [12-FEB-2019 17:25:10:647] nttrd: entry\r\n" +
+					"(5304) [12-FEB-2019 17:25:10:804] nttrd: socket 844 had bytes read=8\r\n" +
+					"(5304) [12-FEB-2019 17:25:10:804] nttrd: exit\r\n" +
 					"(5304) [12-FEB-2019 17:25:10:804] nsprecv: 8 bytes from transport\r\n" +
 					"(5304) [12-FEB-2019 17:25:10:804] nsprecv: tlen=8, plen=8, type=11\r\n" +
 					"(5304) [12-FEB-2019 17:25:10:804] nsprecv: packet dump\r\n" +
@@ -66,7 +71,7 @@ func Test_getPacketFromTraceSnippet(t *testing.T) {
 					"",
 			},
 			want: &Packet{
-				Line:    7,
+				Line:    12,
 				Pid:     5304,
 				TS:      []byte("12-FEB-2019 17:25:10:804"),
 				Typ:     "nsprecv",
