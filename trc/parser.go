@@ -205,16 +205,16 @@ func (p *Parser) scanPacketLine(b []byte) {
 	}
 	b = b[i+2:] // At beging of HEX
 	for i = 0; i < len(b); i += 3 {
-		if b[i] == ' ' {
+		if !isHexDigit(b[i]) {
 			break
 		}
-		p.buff.WriteByte(hexToByte(b[i : i+2])) // Accumulate decoded bytes
+		p.addHexDigit(b[i : i+2]) // Accumulate decoded bytes
 	}
 
 }
 
 // convert 2 hex chars into a byte
-func hexToByte(buf []byte) byte {
+func (p *Parser) addHexDigit(buf []byte) {
 	b := byte(0)
 	for i := 0; i < 2; i++ {
 		c := buf[i]
@@ -223,9 +223,13 @@ func hexToByte(buf []byte) byte {
 			b = b<<4 + c + 10 - 'A'
 		case c >= '0' && c <= '9':
 			b = b<<4 + c - '0'
+		default:
+			// On non HEX don't store the byte
+			return
 		}
 	}
-	return b
+	p.buff.WriteByte(b)
+	return
 }
 
 // inNSC2Addr extract client program
@@ -295,4 +299,8 @@ func baseName(s string) string {
 		return s[i+1:]
 	}
 	return s
+}
+
+func isHexDigit(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')
 }
