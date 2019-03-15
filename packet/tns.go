@@ -100,9 +100,9 @@ func (th TNSHeader) writeFields(sb *strings.Builder) {
 	sb.WriteString("Packet header: ")
 	sb.WriteString(fmt.Sprintf("PktLen(%d),", th.Length))
 	sb.WriteString(fmt.Sprintf("Chksum(%04x),", th.CheckSum))
-	sb.WriteString(fmt.Sprintf("PkType(%d,%s),", th.PkType, packetTypeStr[th.PkType]))
+	sb.WriteString(fmt.Sprintf("PkType(%d=%s),", th.PkType, packetTypeStr[th.PkType]))
 	sb.WriteString(fmt.Sprintf("Flags(%04x),", th.Flags))
-	sb.WriteString(fmt.Sprintf("HdrChkSum(%04x),", th.HeaderCheckSum))
+	sb.WriteString(fmt.Sprintf("HdrChkSum(%04x)", th.HeaderCheckSum))
 }
 
 // func (th TNSHeader) StringBuilder(sb *strings.Builder) {
@@ -151,8 +151,10 @@ func (td TNSData) String() string {
 func (td TNSData) StringBuilder(sb *strings.Builder) {
 	td.TNSHeader.writeFields(sb)
 	writeEol(sb)
-	td.writeFields(sb)
-	writeEol(sb)
+	if td.PkType == 6 {
+		td.writeFields(sb)
+		writeEol(sb)
+	}
 	writePayload(sb, td.TNSHeader.Buffer)
 }
 

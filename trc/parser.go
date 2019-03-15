@@ -1,7 +1,6 @@
 package trc
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -9,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
 	"github.com/simulot/oracle_trc/packet"
 )
 
@@ -27,16 +25,14 @@ type Packet struct {
 
 // Parser is used to parse trc files and extract data packets
 type Parser struct {
-	name       string              // Source name, used for reporting errors
-	line       int                 // current line in trc file
-	s          *bufio.Scanner      // text scanner
-	buff       bytes.Buffer        // buffer used for gathering packet fragments
-	pkChan     chan packetAndError // gather extracted packets
-	clients    map[int]string      // Hold client names per PID
-	packetType string              // current packet type as seen in trc file
-	packetEndMarker []byte // d
-	pk         *Packet             // current packet
-	socket     int                 // current socket
+	name            string              // Source name, used for reporting errors
+	s               *trc_scanner        // text scanner
+	buff            bytes.Buffer        // buffer used for gathering packet fragments
+	pkChan          chan packetAndError // gather extracted packets
+	clients         map[int]string      // Hold client names per PID
+	packetType      string              // current packet type as seen in trc file
+	packetEndMarker []byte              // d
+	pk              *Packet             // current packet
 }
 
 type packetAndError struct {
@@ -48,7 +44,7 @@ type packetAndError struct {
 func New(r io.Reader, name string) *Parser {
 	name = baseName(name)
 	p := &Parser{
-		s:          bufio.NewScanner(r),
+		s:          newScanner(r),
 		pkChan:     make(chan packetAndError),
 		clients:    make(map[int]string),
 		name:       name,
@@ -76,35 +72,25 @@ func (p *Parser) EmitPacket(pk *Packet, err error) {
 	}
 	p.pkChan <- packetAndError{
 		pk:  pk,
-		err: errors.Wrapf(err, "Error reading %s at line %d", p.name, p.line),
+		err: err,
 	}
-}
-
-// scan wrap the standard scan for counting lines
-func (p *Parser) scan() bool {
-	b := p.s.Scan()
-	p.line++
-	// if p.line%1000 == 0 || !b {
-	// 	fmt.Println(p.name, " ", p.line)
-	// }
-	return b
 }
 
 // stateFn is the function that handle a state
 type stateFn func(p *Parser) stateFn
 
 func waitInterstingLines(p *Parser) stateFn {
-	for p.scan() {
+	for p.s.Scan() {
 		if bytes.Contains(p.s.Bytes(), []byte("nspsend: entry")) {
 			return p.scanPacket("nspsend")
 		}
-		if bytes.HasSuffix(p.s.Bytes(), []byte("nsprecv: entry")) {
+		if bytes.Contains(p.s.Bytes(), []byte("nsprecv: entry")) {
 			return p.scanPacket("nsprecv")
 		}
-		if bytes.HasSuffix(p.s.Bytes(), []byte("nsbasic_brc: entry")) {
+		if bytes.Contains(p.s.Bytes(), []byte("nsbasic_brc: entry")) {
 			return p.scanPacket("nsbasic_brc")
 		}
-		if bytes.HasSuffix(p.s.Bytes(), []byte("nsbasic_bsd: entry")) {
+		if bytes.Contains(p.s.Bytes(), []byte("nsbasic_bsd: entry")) {
 			return p.scanPacket("nsbasic_bsd")
 		}
 		if bytes.Contains(p.s.Bytes(), []byte("nsc2addr:")) {
@@ -116,24 +102,11 @@ func waitInterstingLines(p *Parser) stateFn {
 	return nil
 }
 
-func inNetwork(p *Parser) stateFn {
-	for p.scan() {
-		if bytes.HasSuffix(p.s.Bytes(), []byte("exit")) {
-			return waitInterstingLines
-		}
-		if pos := bytes.Index(p.s.Bytes(), []byte("socket")); pos >= 0 && pos < len(p.s.Bytes())-2 {
-			p.socket, _ = strconv.Atoi(string(p.s.Bytes()[pos+1:]))
-		}
-	}
-	p.EmitPacket(nil, p.s.Err())
-	return nil
-}
-
 func (p *Parser) scanPacket(t string) stateFn {
 	p.packetType = t
 	p.pk = &Packet{
 		Name: p.name,
-		Line: p.line,
+		Line: 0,
 		TS:   nil,
 		Typ:  p.packetType,
 	}
@@ -141,39 +114,52 @@ func (p *Parser) scanPacket(t string) stateFn {
 	return inPacket
 }
 
+// inPacket parse trc lines bout a network frame
 func inPacket(p *Parser) stateFn {
-	exitString := []byte(p.packetType + ": exit")
 
-	for p.scan() {
+	for p.s.Scan() {
 		b := p.s.Bytes()
-		if bytes.Contains(b, exitString) {
+		if bytes.Contains(b, []byte(p.packetType)) && bytes.Contains(b, []byte("exit")) {
 			break
 		}
-		if 
+		if bytes.HasSuffix(b, []byte("packet dump")) {
+			return inDumpPacket
+		}
 
-		p.scanPacketLine(p.s.Bytes())
+		if i := bytes.Index(b, []byte("socket")); i >= 0 {
+			i = i + len("socket") + 1
+			if j := bytes.Index(b[i:], []byte{0x20}); j > 0 {
+				p.pk.Socket, _ = strconv.Atoi(string(b[i : i+j]))
+			}
+		}
 	}
 
+	var pk *Packet
+	pk, p.pk = p.pk, nil
+	pk.Payload = make([]byte, p.buff.Len())
+	copy(pk.Payload, p.buff.Bytes())
+	p.EmitPacket(pk, p.s.Err())
+	return waitInterstingLines
 }
 
 // inDumpPacket scan nsbasic lines then yield to waitInterstingLines
 func inDumpPacket(p *Parser) stateFn {
 	p.buff.Reset()
-	var packetType = []byte(p.pk.Typ)
 	var b []byte
 
-	for p.scan() {
+	for p.s.Scan() {
+		if p.pk.Line == 0 {
+			p.pk.Line = p.s.Line
+		}
 		b = p.s.Bytes()
-		if !bytes.Contains(b, packetType) {
+		if len(b) > 0 && b[len(b)-1] != '|' {
+			p.s.Backup()
 			break
 		}
 		p.scanPacketLine(p.s.Bytes())
 	}
 
-	p.pk.Payload = make([]byte, p.buff.Len())
-	copy(p.pk.Payload, p.buff.Bytes())
-	p.EmitPacket(p.pk, errors.Wrap(p.s.Err(), "End of file while in packet dump") /*, nil*/)
-	return waitInterstingLines
+	return inPacket // We need to parse all line regarding this frame
 }
 
 // scanPID get PID from scanned line
@@ -201,6 +187,7 @@ func (p *Parser) scanPID(b []byte) (int, []byte) {
 
 // scanPacketLine scan one of packets lines
 func (p *Parser) scanPacketLine(b []byte) {
+
 	if p.pk.Pid == 0 {
 		// Get PID and client
 		p.pk.Pid, b = p.scanPID(b)
@@ -216,7 +203,7 @@ func (p *Parser) scanPacketLine(b []byte) {
 		}
 	}
 
-	// Determine time stop
+	// Determine time stamp
 	b = b[i:]
 	for i = 0; i < len(b) && b[i] != ']'; i++ {
 	}
@@ -270,7 +257,7 @@ func (p *Parser) addHexDigit(buf []byte) {
 func inNSC2Addr(p *Parser) stateFn {
 	var b []byte
 
-	for p.scan() {
+	for p.s.Scan() {
 		b = p.s.Bytes()
 		if bytes.HasSuffix(b, []byte("nsc2addr: normal exit")) {
 			return waitInterstingLines
@@ -306,9 +293,10 @@ func (pk Packet) WriteContext(sb *strings.Builder) {
 	sb.WriteString(pk.Name)
 	sb.WriteString(fmt.Sprintf("(%d),", pk.Line))
 	sb.Write(pk.TS)
-	sb.WriteByte(',')
+	sb.WriteString(", ")
 	sb.WriteString(pk.Client)
 	sb.WriteString(fmt.Sprintf("(%d),", pk.Pid))
+	sb.WriteString(fmt.Sprintf(" Socket(%d), ", pk.Socket))
 	sb.WriteString(pk.Typ)
 	sb.WriteByte(':')
 }

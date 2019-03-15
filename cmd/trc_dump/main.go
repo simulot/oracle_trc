@@ -72,8 +72,11 @@ func parseFile(fn string, timeParser ts.TimeParserFn, tAfter time.Time) error {
 	var pk *trc.Packet
 	for {
 		pk, err = p.NextPacket()
-		if err != nil || pk == nil {
+		if err == nil && pk == nil {
 			break
+		}
+		if pk == nil || len(pk.Payload) == 0 {
+			continue
 		}
 		if !tAfter.IsZero() && len(pk.TS) > 0 {
 			ts, err := timeParser(pk.TS)
