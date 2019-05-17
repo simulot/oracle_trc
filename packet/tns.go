@@ -67,16 +67,15 @@ func PacketStringer(b []byte) Stringer {
 
 }
 
-// func PacketStringBuilder(b []byte) StringBuilder {
-// 	t := b[4]
-// 	switch t {
-// 	case 6:
-// 		return ReadTNSData(b)
-// 	default:
-// 		return ReadTNSHeader(b)
-// 	}
-
-// }
+func PacketStringBuilder(b []byte) StringBuilder {
+	t := b[4]
+	switch t {
+	case 6:
+		return ReadTNSData(b)
+	default:
+		return ReadTNSHeader(b)
+	}
+}
 
 type TNSHeader struct {
 	Buffer         []byte
@@ -105,10 +104,10 @@ func (th TNSHeader) writeFields(sb *strings.Builder) {
 	sb.WriteString(fmt.Sprintf("HdrChkSum(%04x)", th.HeaderCheckSum))
 }
 
-// func (th TNSHeader) StringBuilder(sb *strings.Builder) {
-// 	th.writeFields(sb)
-// 	writePayload(sb, th.Buffer[8:])
-// }
+func (th TNSHeader) StringBuilder(sb *strings.Builder) {
+	th.writeFields(sb)
+	writePayload(sb, th.Buffer[8:])
+}
 
 func ReadTNSHeader(b []byte) TNSHeader {
 	return TNSHeader{

@@ -15,7 +15,7 @@
             "args": [
                     "-after=11-MAR-2019", 
                     // "-date-order=T",
-                    "C:\\TEMP\\trc\\cli_7980.trc" ]
+                    "C:\\TEMP\\trc\\uat1\\client_1100.trc" ]
                     //"..\\..\\DATA\\*.trc", "/home/jfcassan/Downloads/trc/*.trc"]
         }
     ]

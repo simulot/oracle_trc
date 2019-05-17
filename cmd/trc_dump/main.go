@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/simulot/oracle_trc/trc"
@@ -12,6 +13,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/simulot/oracle_trc/ts"
 )
+
+type response struct {
+	t   time.Time
+	pk  *trc.Packet
+	err error
+}
+
+var iAmDone = make(chan bool)
 
 func main() {
 	flag.Usage = func() {
@@ -21,6 +30,7 @@ func main() {
 	}
 	tsFormat := flag.String("tsFormat", "DD-MON-YYYY HH:MI:SS:FF3", "Timestamp format, oracle's way.")
 	pAfter := flag.String("after", "", "Filter packets exchanged after this date. In same format as tsFormat parameter.")
+	pSortByDate := flag.Bool("date-order", false, "Sort output by date")
 
 	flag.Parse()
 
@@ -46,6 +56,13 @@ func main() {
 		}
 	}
 
+	rChan := make(chan response)
+	if *pSortByDate {
+		go dateSortedOutput(rChan)
+	} else {
+		go directOutput(rChan)
+	}
+
 	for _, a := range flag.Args() {
 		fns, err := filepath.Glob(a)
 		if err != nil {
@@ -53,15 +70,17 @@ func main() {
 			os.Exit(1)
 		}
 		for _, fn := range fns {
-			err = parseFile(fn, timeParser, tAfter)
+			err = parseFile(fn, timeParser, tAfter, rChan)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 			}
 		}
 	}
+	close(rChan)
+	<-iAmDone
 }
 
-func parseFile(fn string, timeParser ts.TimeParserFn, tAfter time.Time) error {
+func parseFile(fn string, timeParser ts.TimeParserFn, tAfter time.Time, r chan response) error {
 	f, err := os.Open(fn)
 	if err != nil {
 		fmt.Println(err)
@@ -72,14 +91,20 @@ func parseFile(fn string, timeParser ts.TimeParserFn, tAfter time.Time) error {
 	var pk *trc.Packet
 	for {
 		pk, err = p.NextPacket()
-		if err == nil && pk == nil {
+		if pk == nil {
 			break
 		}
-		if pk == nil || len(pk.Payload) == 0 {
-			continue
+
+		if err != nil && pk == nil {
+			r <- response{
+				pk:  pk,
+				err: err,
+			}
+			break
 		}
-		if !tAfter.IsZero() && len(pk.TS) > 0 {
-			ts, err := timeParser(pk.TS)
+		var ts time.Time
+		if len(pk.TS) > 0 {
+			ts, err = timeParser(pk.TS)
 			if err != nil {
 				return err
 			}
@@ -87,7 +112,45 @@ func parseFile(fn string, timeParser ts.TimeParserFn, tAfter time.Time) error {
 				continue
 			}
 		}
-		fmt.Println(pk)
+		r <- response{
+			t:   ts,
+			pk:  pk,
+			err: err,
+		}
 	}
 	return nil
+}
+
+func directOutput(ch chan response) {
+	for r := range ch {
+		pk, err := r.pk, r.err
+		if pk != nil {
+			fmt.Fprintln(os.Stdout, pk.String())
+		}
+		if err != nil {
+			fmt.Println(os.Stderr, err)
+		}
+	}
+	close(iAmDone)
+}
+
+type responseByDate []response
+
+func (r responseByDate) Len() int           { return len(r) }
+func (r responseByDate) Less(i, j int) bool { return r[i].t.Before(r[j].t) }
+func (r responseByDate) Swap(i, j int)      { r[j], r[i] = r[i], r[j] }
+
+func dateSortedOutput(ch chan response) {
+	l := []response{}
+
+	for r := range ch {
+		if r.pk != nil {
+			l = append(l, r)
+		}
+	}
+	sort.Sort(responseByDate(l))
+	for _, r := range l {
+		fmt.Println(r.pk.String())
+	}
+	close(iAmDone)
 }

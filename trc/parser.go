@@ -134,7 +134,7 @@ func inPacket(p *Parser) stateFn {
 		}
 	}
 
-	var pk *Packet
+	var pk *Packet 
 	pk, p.pk = p.pk, nil
 	pk.Payload = make([]byte, p.buff.Len())
 	copy(pk.Payload, p.buff.Bytes())
@@ -282,7 +282,7 @@ func (pk Packet) String() string {
 	sb := strings.Builder{}
 	pk.WriteContext(&sb)
 	writeEol(&sb)
-	pks := packet.ReadTNSData(pk.Payload)
+	pks := packet.PacketStringBuilder(pk.Payload)
 	pks.StringBuilder(&sb)
 	writeEol(&sb)
 	return sb.String()
