@@ -8,14 +8,6 @@ import (
 	"strings"
 )
 
-/*
-	Google findings on TNS packets
-	https://blog.pythian.com/repost-oracle-protocol/
-	https://flylib.com/books/en/2.680.1/the_oracle_network_architecture.html
-	https://github.com/wireshark/wireshark/blob/master/epan/dissectors/packet-tns.c
-
-*/
-
 type PacketType uint8
 
 const (
@@ -83,7 +75,7 @@ type TNSHeader struct {
 	CheckSum       uint16     // ofs: 2
 	PkType         PacketType // ofs: 4
 	Flags          uint8      // ofs: 5
-	HeaderCheckSum uint16     // ofs: 6
+	HeaderCheckSum uint16     // ofs: 6, len 8
 }
 
 func (th TNSHeader) String() string {
@@ -121,11 +113,11 @@ func ReadTNSHeader(b []byte) TNSHeader {
 }
 
 type TNSData struct {
-	TNSHeader               // ofs: 0 Len 7
+	TNSHeader               // ofs: 0 Len 8
 	DataFlag         uint16 // ofs: 8
 	Function         uint8  // ofs: 10
 	Sequence         uint8  // ofs: 11
-	ExtendedFunction uint8  // ofs: 12
+	ExtendedFunction uint8  // ofs: 12 len 13
 }
 
 func ReadTNSData(b []byte) TNSData {
@@ -182,8 +174,11 @@ func (td TNSData) writeFields(sb *strings.Builder) {
 	4A:			Sequence number
 	01 01 01: ???
 	01 : 1 / No bind variable, 2 Bind variable
-	02 03 5E 4B
-	02 80 61 00
+	02
+	03 5E Marker
+	4B Flag
+	02 80 ExeOp
+	61 00
 	01 01 45 01
 	01 0D 01 01
 	00 01 64 00

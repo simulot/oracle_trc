@@ -29,6 +29,15 @@ TRACE_DIRECTORY_CLIENT = d:\logs\oracle
 - [X] Write tests independent from trace files (confidentiality) 
 - [X] Sort outputs from several trace file in time order
 - [ ] Understand binary format of packets (help wanted)
-- [ ] Determine bind parameters value (help wanted)
+- [X] Determine bind parameters value (help wanted)
 - [ ] Decode responses (help wanted)
 
+
+
+# Some information
+
+Findings on TNS packets
+- https://blog.pythian.com/repost-oracle-protocol/
+- https://flylib.com/books/en/2.680.1/the_oracle_network_architecture.html
+- https://github.com/wireshark/wireshark/blob/master/epan/dissectors/packet-tns.c
+- https://github.com/sijms/go-ora
