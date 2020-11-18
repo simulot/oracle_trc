@@ -37,3 +37,11 @@ On this sample,
 - nsbasic_bsd is the type of packet as written in trace file
 
 
+
+
+# Documentation
+
+
+http://2014.zeronights.org/assets/files/slides/oracle-database-communication-protocol.pdf
+https://medium.com/@iphelix/hacking-oracle-tns-listener-c74070bde8e4
+
