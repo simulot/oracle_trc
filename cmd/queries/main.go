@@ -31,6 +31,7 @@ func main() {
 	tsFormat := flag.String("tsFormat", "DD-MON-YYYY HH:MI:SS:FF3", "Timestamp format, oracle's way.")
 	pAfter := flag.String("after", "", "Filter packets exchanged after this date. In same format as tsFormat parameter.")
 	pSortByDate := flag.Bool("date-order", false, "Sort output by date")
+	rowsToRead := flag.Int("row", 25, "Number of response row to extract, 0 to turn off the feature.")
 
 	flag.Parse()
 
@@ -71,7 +72,7 @@ func main() {
 		}
 		for _, fn := range fns {
 			fmt.Println(fn)
-			err = parseFile(fn, timeParser, tAfter, rChan)
+			err = parseFile(fn, timeParser, tAfter, rowsToRead, rChan)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 			}
@@ -81,14 +82,14 @@ func main() {
 	<-iAmDone
 }
 
-func parseFile(fn string, timeParser ts.TimeParserFn, tAfter time.Time, r chan response) error {
+func parseFile(fn string, timeParser ts.TimeParserFn, tAfter time.Time, rowsToRead int, r chan response) error {
 	f, err := os.Open(fn)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 	defer f.Close()
-	p := queries.New(f, fn)
+	p := queries.New(f, fn, rowsToRead)
 	var q *queries.Query
 	for err != io.EOF {
 		q, err = p.Next()

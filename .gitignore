@@ -3,3 +3,5 @@ debug
 debug.test
 *.txt
 *.exe
+*.log
+*.sql

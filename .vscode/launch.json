@@ -15,8 +15,9 @@
             "args": [
                     // "-after=11-MAR-2019", 
                     // "-date-order=T",
-                    "c:\\TEMP\\2020-11-04\\client_2548.trc" ]
-                    //"..\\..\\DATA\\*.trc", "/home/jfcassan/Downloads/trc/*.trc"]
+                    "C:\\TEMP\\2020-11-17\\client_6364.trc",
+                    //"..\\..\\DATA\\*.trc", "/home/jfcassan/Downloads/trc/*.trc"
+                ]
         }
     ]
 }

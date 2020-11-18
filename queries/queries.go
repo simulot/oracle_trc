@@ -50,9 +50,10 @@ func (q Query) String() string {
 
 // Parser is used to parse trc files and extract queries
 type Parser struct {
-	p     *trc.Parser // Trace file parser
-	q     *Query      // current query
-	qChan chan queryAndError
+	p          *trc.Parser // Trace file parser
+	q          *Query      // current query
+	rowsToRead int         // rows to be read
+	qChan      chan queryAndError
 }
 
 type queryAndError struct {
@@ -61,10 +62,11 @@ type queryAndError struct {
 }
 
 // New create a trc parser
-func New(r io.Reader, name string) *Parser {
+func New(r io.Reader, name string, rowsToRead int) *Parser {
 	p := &Parser{
-		p:     trc.New(r, name),
-		qChan: make(chan queryAndError),
+		p:          trc.New(r, name),
+		qChan:      make(chan queryAndError),
+		rowsToRead: rowsToRead,
 	}
 
 	go func() {
@@ -94,6 +96,23 @@ func waitQuery(p *Parser) stateFn {
 		}
 		if pk.Typ == "nsbasic_bsd" {
 			return p.parseQuery(pk)
+		}
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+	return nil
+}
+
+// waitQuery wait a packet sent by the client with a query
+func waitResponse(p *Parser) stateFn {
+	for {
+		pk, err := p.p.NextPacket()
+		if pk == nil && err == nil {
+			break
+		}
+		if pk.Typ == "nsbasic_brc" {
+			return p.parseResponse(pk)
 		}
 		if err != nil {
 			fmt.Println(err)
@@ -285,7 +304,10 @@ func (p *Parser) parseQuery(pk *trc.Packet) stateFn {
 	}
 
 	_ = discardedInt
-	return waitQuery
+	if p.rowsToRead == 0 {
+		return waitQuery
+	}
+	return waitResponse
 }
 
 type EndianNess int
@@ -302,51 +324,6 @@ var queryKeyWords = [][]byte{
 	[]byte("BEGIN"),
 }
 
-/*
-func detectQuery(pl []byte) *Query {
-
-	if pl[12] != 3 || pl[13] != 0x5e {
-		return nil
-	}
-
-	l := len(pl)
-	if l > 0x100 {
-		l = 0x100
-	}
-	b := toUpperAscii(pl[:l])
-	pos := -1
-
-	for k := 0; k < len(queryKeyWords); k++ {
-		p := bytes.Index(b, queryKeyWords[k])
-		if pos == -1 || (p > 0 && p < pos) {
-			pos = p
-		}
-	}
-
-	if pos == -1 {
-		return nil
-	}
-	// Check white chars prepending the query
-	for pos > 1 {
-		switch b[pos-1] {
-		case ' ', '\t', '\r', '\n', '(':
-			pos--
-		default:
-			pos--
-			break
-		}
-	}
-	if pos <= 0 {
-		return nil
-	}
-
-	q = &Query{
-
-	}
-	return nil
-}
-
-*/
 func toUpperAscii(b []byte) []byte {
 	o := make([]byte, len(b))
 	copy(o, b)
@@ -365,4 +342,35 @@ func writeEol(sb *strings.Builder) {
 		return
 	}
 	sb.WriteByte('\n')
+}
+
+func (p *Parser) waitResponse(pk *trc.Packet) stateFn {
+	for {
+		pk, err := p.p.NextPacket()
+		if pk == nil && err == nil {
+			break
+		}
+		if pk.Typ == "nsbasic_brc" {
+			return p.parseResponse(pk)
+		}
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+	return nil
+}
+
+// parseQuery and returns the next stateFn
+func (p *Parser) parseResponse(pk *trc.Packet) stateFn {
+
+	var err error
+	var b byte
+
+	q := &Response{
+		Packet: pk,
+	}
+}
+
+type Response struct {
+	Packet *trc.Packet // Query's packet
 }
